@@ -41,10 +41,14 @@ public:
 private:
     static constexpr int kMaxVoices = 8;
 
+    double currentSampleRate = 44100.0;
+
     std::vector<SawConverter> converters;
-    std::vector<PitchShifter> shifters;  // numChannels * kMaxVoices, flat
+    std::vector<PitchShifter> shifters;      // numChannels * kMaxVoices, flat
+    std::vector<float>        toneState;     // 1-pole LP state, one per channel
 
     std::atomic<float>* inputGainParam  = nullptr;
+    std::atomic<float>* toneParam       = nullptr;
     std::atomic<float>* driveParam      = nullptr;
     std::atomic<float>* voicesParam     = nullptr;
     std::atomic<float>* detuneParam     = nullptr;
