@@ -151,7 +151,6 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const bool  hasUnison = numExtra > 0 && wet > 0.001f;
     const bool  hasEnvF   = envSensPct > 0.1f;
     const float normDenom = std::sqrt(1.0f + wet * (float)numExtra);
-    const float envBlend  = envResPct / 100.0f;  // 0 = LP output, 1 = BP output (wah)
 
     float voiceRatios[kMaxVoices];
     if (hasUnison) {
@@ -173,15 +172,25 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         float& low   = svfLow      [static_cast<size_t>(ch)];
         float& band  = svfBand     [static_cast<size_t>(ch)];
 
-        // SVF coefficients computed once per block from last block's envelope.
-        // One sin() call per channel per block — negligible cost.
-        float svfF = 0.0f, svfQ = 2.0f;
+        // Biquad LP coefficients computed once per block from last block's envelope.
+        // Bilinear-transform biquad is stable up to Nyquist; the old Chamberlin SVF
+        // became unstable above ~sr/6 (~7.3 kHz at 44.1 kHz).
+        float bqB0 = 0.0f, bqB1 = 0.0f, bqB2 = 0.0f, bqA1 = 0.0f, bqA2 = 0.0f;
         if (hasEnvF) {
             const float minFreq = envFreqHz * std::exp2(-envSensPct / 100.0f * 3.0f);
-            const float effFreq = juce::jlimit(50.0f, sr_f * 0.45f,
+            const float effFreq = juce::jlimit(20.0f, sr_f * 0.49f,
                                                minFreq + envF * (envFreqHz - minFreq));
-            svfF = 2.0f * std::sin(3.14159265f * effFreq / sr_f);
-            svfQ = juce::jlimit(0.1f, 2.0f, 2.0f - envResPct / 100.0f * 1.8f);
+            const float w0    = 6.2832f * effFreq / sr_f;
+            const float sinW0 = std::sin(w0);
+            const float cosW0 = std::cos(w0);
+            const float Q     = juce::jlimit(0.5f, 10.0f, 0.5f + envResPct / 100.0f * 9.5f);
+            const float alpha = sinW0 / (2.0f * Q);
+            const float norm  = 1.0f / (1.0f + alpha);
+            bqB0 = (1.0f - cosW0) * 0.5f * norm;
+            bqB1 = (1.0f - cosW0) * norm;
+            bqB2 = bqB0;
+            bqA1 = -2.0f * cosW0 * norm;
+            bqA2 = (1.0f - alpha) * norm;
         }
 
         for (int i = 0; i < numSamples; ++i) {
@@ -205,12 +214,13 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
             const float ec = absOut > envF ? envAtkCoeff : envRelCoeff;
             envF = ec * envF + (1.0f - ec) * absOut;
 
-            // State-variable filter: LP output blended with BP for resonant wah character.
+            // Biquad LP (direct form II transposed). High Q creates the resonant
+            // peak that gives the wah character; no separate LP/BP blend needed.
             if (hasEnvF) {
-                const float high = output - low - svfQ * band;
-                band += svfF * high;
-                low  += svfF * band;
-                output = low * (1.0f - envBlend) + band * envBlend;
+                const float y = bqB0 * output + low;
+                low  = bqB1 * output - bqA1 * y + band;
+                band = bqB2 * output - bqA2 * y;
+                output = y;
             }
 
             data[i] = output * outputGainLin;
