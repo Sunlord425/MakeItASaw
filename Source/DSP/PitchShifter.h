@@ -61,7 +61,10 @@ public:
         readA += ratio;
         if (readA >= kBufLen) readA -= kBufLen;
 
-        ++writeIdx;
+        // Keep writeIdx bounded to [0, kBufLen) so float(writeIdx) never loses
+        // integer precision. Without this, after ~6 min the delay calculation
+        // silently drifts and read heads jump to wrong positions.
+        writeIdx = (writeIdx + 1) & kMask;
         return out;
     }
 

@@ -148,7 +148,10 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const float toneA     = 1.0f - std::exp(-6.2832f * toneCutoff / sr_f);
     const float driveK    = 1.0f + drivePercent * 0.09f;
     const bool  hasDrive  = drivePercent > 0.5f;
-    const bool  hasUnison = numExtra > 0 && wet > 0.001f;
+    // Also bypass when detune≈0: all ratios would be 1.0, producing delayed copies
+    // at the same pitch as the dry signal. Mixing them creates a comb filter whose
+    // notches are heard as low-frequency amplitude modulation.
+    const bool  hasUnison = numExtra > 0 && wet > 0.001f && detuneCents > 0.01f;
     const bool  hasEnvF   = envSensPct > 0.1f;
     const float normDenom = std::sqrt(1.0f + wet * (float)numExtra);
 
