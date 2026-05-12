@@ -14,11 +14,17 @@ FetchContent_Declare(JUCE
 )
 FetchContent_MakeAvailable(JUCE)
 
+if(APPLE)
+    set(PLUGIN_FORMATS AU VST3 Standalone)
+else()
+    set(PLUGIN_FORMATS VST3 Standalone)
+endif()
+
 juce_add_plugin(SawPlugin
     COMPANY_NAME                "LorenzoMazzeo"
     PLUGIN_MANUFACTURER_CODE    Lmaz
     PLUGIN_CODE                 SawP
-    FORMATS                     AU VST3 Standalone
+    FORMATS                     ${PLUGIN_FORMATS}
     PRODUCT_NAME                "Saw"
     DESCRIPTION                 "Monophonic to sawtooth converter"
     IS_SYNTH                    FALSE

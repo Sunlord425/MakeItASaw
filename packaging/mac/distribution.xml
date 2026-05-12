@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>Saw 0.1.0</title>
+    <organization>com.lorenzomazzeo</organization>
+    <domains enable_localSystem="true"/>
+    <options customize="never" require-scripts="true" rootVolumeOnly="true"/>
+
+    <pkg-ref id="com.lorenzomazzeo.saw.au"/>
+    <pkg-ref id="com.lorenzomazzeo.saw.vst3"/>
+
+    <choices-outline>
+        <line choice="com.lorenzomazzeo.saw.au"/>
+        <line choice="com.lorenzomazzeo.saw.vst3"/>
+    </choices-outline>
+
+    <choice id="com.lorenzomazzeo.saw.au" title="AU Plugin" description="Audio Unit for Logic Pro, GarageBand, and other AU hosts.">
+        <pkg-ref id="com.lorenzomazzeo.saw.au"/>
+    </choice>
+    <choice id="com.lorenzomazzeo.saw.vst3" title="VST3 Plugin" description="VST3 for Ableton Live, Reaper, and other VST3 hosts.">
+        <pkg-ref id="com.lorenzomazzeo.saw.vst3"/>
+    </choice>
+
+    <pkg-ref id="com.lorenzomazzeo.saw.au" version="0.1.0" onConclusion="none">Saw-AU.pkg</pkg-ref>
+    <pkg-ref id="com.lorenzomazzeo.saw.vst3" version="0.1.0" onConclusion="none">Saw-VST3.pkg</pkg-ref>
+</installer-gui-script>

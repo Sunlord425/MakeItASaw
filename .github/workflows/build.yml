@@ -1,0 +1,119 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    name: macOS (AU + VST3)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-macos-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release -- -j$(sysctl -n hw.logicalcpu)
+
+      - name: Sign AU
+        run: codesign -s - --force build/SawPlugin_artefacts/Release/AU/Saw.component
+
+      - name: Sign VST3
+        run: codesign -s - --force "build/SawPlugin_artefacts/Release/VST3/Saw.vst3"
+
+      - name: Build macOS installer (pkg)
+        run: |
+          pkgbuild \
+            --root build/SawPlugin_artefacts/Release/AU/Saw.component \
+            --identifier com.lorenzomazzeo.saw.au \
+            --version 0.1.0 \
+            --install-location /Library/Audio/Plug-Ins/Components/Saw.component \
+            --scripts packaging/mac \
+            build/Saw-AU.pkg
+
+          pkgbuild \
+            --root "build/SawPlugin_artefacts/Release/VST3/Saw.vst3" \
+            --identifier com.lorenzomazzeo.saw.vst3 \
+            --version 0.1.0 \
+            --install-location "/Library/Audio/Plug-Ins/VST3/Saw.vst3" \
+            build/Saw-VST3.pkg
+
+          productbuild \
+            --distribution packaging/mac/distribution.xml \
+            --package-path build \
+            build/Saw-macOS.pkg
+
+      - name: Upload macOS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saw-macOS
+          path: build/Saw-macOS.pkg
+
+  build-windows:
+    name: Windows (VST3)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache JUCE
+        uses: actions/cache@v4
+        with:
+          path: build/_deps
+          key: juce-windows-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Install NSIS
+        run: choco install nsis -y
+
+      - name: Build Windows installer
+        shell: cmd
+        run: |
+          xcopy /E /I "build\SawPlugin_artefacts\Release\VST3\Saw.vst3" "packaging\windows\Saw.vst3\"
+          makensis packaging\windows\installer.nsi
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Saw-Windows
+          path: packaging/windows/Saw-*.exe
+
+  release:
+    name: GitHub Release
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Saw-macOS
+          path: dist
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Saw-Windows
+          path: dist
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
