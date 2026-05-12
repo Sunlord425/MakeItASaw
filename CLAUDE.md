@@ -4,32 +4,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A DAW plugin that converts any arbitrary pitched monophonic input signal into a sawtooth wave. The core constraint is **no FFT or pitch-tracking algorithms** — the conversion must be zero-latency (or near-zero), achieved entirely through analog-style DSP signal processing.
+A DAW plugin that converts any arbitrary pitched monophonic input signal into a sawtooth wave. The core constraint is **no FFT or pitch-tracking algorithms** — the conversion is achieved entirely through analog-style DSP signal processing.
 
 Plugin format targets: VST3, AU (required), Standalone. Built with **JUCE 8.0.6** via CMake FetchContent.
 
 ## Signal Chain Architecture
 
-The conversion pipeline, in order:
+```
+Input → IN GAIN → TONE (1-pole LP) → DRIVE (tanh) → ZCD converter
+      → UNISON mix → ENV FILTER (biquad LP) → OUT GAIN → Output
+```
 
-1. **Comparator** — outputs high when input > 0, low when input < 0, producing a pulse wave
-2. **DC bias correction** — fixed subtraction to center the pulse wave around zero (removes asymmetry)
-3. **Asymmetric slew limiter** — slew only on the rising edge; produces a ramp-up followed by a sharp drop, forming the sawtooth shape
-4. **Amplitude normalization** — compensates for higher-pitched notes being quieter (less rise time between rarefactions)
-5. **Envelope follower** — scales the normalized output to match the amplitude envelope of the input signal
+**ZCD converter** (`SawConverter.h`): rising zero-crossing detector. At each rising zero crossing, the ramp resets to −1 and rises continuously through the full period, producing a complete sawtooth per cycle.
 
-### Known Limitation & Proposed Fix
+- `armed` flag provides hysteresis: a reset fires only if the signal has gone below −0.01 since the last reset. This ignores tiny harmonic excursions that would cause false triggers.
+- When `smoothedPeriod` is valid, a minimum gap of `smoothedPeriod * 0.5` is enforced between resets, preventing harmonics within the same cycle from triggering spurious resets on high notes.
+- Slew rate calibrated for 25 Hz (ramp covers −1→+1 in one full period). Higher notes rise less far; the peak-follower normalizer compensates.
+- Peak follower operates on `slewPrev + 1.0` (shifted to [0, 2]); noise gate threshold 0.005 (≈ −46 dB).
+- 1st-order DC blocker (R = 0.9995, ≈ 3.5 Hz) follows normalization as a safety net.
+- Input envelope follower (3 ms attack, 80 ms release) scales the output to follow the input dynamics.
 
-During the negative half-cycle of the input, the comparator output stays at zero, producing a "half-saw / half-flat" waveform. A proposed fix:
+**TONE pre-filter** (`processBlock`): 1-pole LP applied before DRIVE to suppress harmonics before they reach the ZCD. Cutoff 100 Hz – 20 kHz; default fully open. Rolling it down reduces false ZCD triggers on guitar, particularly on high notes.
 
-- Take a 90°-phase-shifted copy of the input signal
-- Optionally invert it (multiply by −1)
-- Sum it with the primary signal path so the rise of one fills the gap of the other
-- Verify that summing does not alter perceived pitch
+**DRIVE**: tanh saturation applied after TONE. Squares up the signal so each fundamental period has one dominant rising zero crossing.
 
-### Nice-to-Have Feature
+**UNISON** (`PitchShifter.h`): up to 8 delay-based pitch shifters per channel. Ratios spread evenly from −detune to +detune cents. Mix uses equal-power normalization (`sqrt(1 + wet·N)`) to keep perceived loudness stable as voice count grows. Crossfades use cosine windowing over 128 samples to reduce glitches.
 
-Allow the user to mix in detuned copies of the output sawtooth with the dry signal (unison/detune effect).
+**ENV FILTER**: bilinear-transform biquad LP applied after unison mix. Cutoff is modulated by a per-channel envelope follower (3 ms attack, 150 ms release) tracking the saw output. SVF coefficients are computed once per block (one `sin`/`cos` call per channel). FREQ sets the peak cutoff at maximum envelope; SENS controls the sweep depth in octaves (0 = bypass); RES controls Q (0.5→10), which raises a resonant peak for the wah character. The biquad is unconditionally stable up to Nyquist (the old Chamberlin SVF was used previously and became unstable above ~sr/6).
 
 ## Build Commands
 
@@ -39,6 +40,10 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
 # Build all formats (AU, VST3, Standalone)
 cmake --build build --config Debug -- -j$(sysctl -n hw.logicalcpu)
+
+# Release build (for distribution)
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release
+cmake --build build-release --config Release -- -j$(sysctl -n hw.logicalcpu)
 ```
 
 Artifacts land in `build/SawPlugin_artefacts/Debug/{AU,VST3,Standalone}/`.
@@ -58,19 +63,29 @@ auval -v aufx SawP Lmaz              # type=aufx subtype=SawP manufacturer=Lmaz
 
 ```
 Source/
-├── DSP/SawConverter.h     — header-only DSP class, all signal chain logic here
-├── PluginProcessor.h/cpp  — JUCE AudioProcessor; owns a SawConverter per channel
-└── PluginEditor.h/cpp     — minimal UI (dark background + "SAW" label)
+├── DSP/
+│   ├── SawConverter.h   — ZCD-based mono→sawtooth converter (header-only)
+│   └── PitchShifter.h   — delay-based pitch shifter for unison voices (header-only)
+├── PluginProcessor.h/cpp — AudioProcessor: owns converters, shifters, biquad state
+└── PluginEditor.h/cpp    — Three-section UI: GAIN STAGE | UNISON | ENV FILTER
 ```
 
-**DSP design notes** (`SawConverter.h`):
+**Parameters** (APVTS IDs):
 
-The core algorithm is a **rising zero-crossing detector** (not the original comparator/DC-bias/slew chain). At each rising zero crossing of the pre-processed input, the ramp resets to −1 and then rises continuously through the full period, producing a complete sawtooth per cycle rather than a half-saw / half-flat shape.
+| ID | Section | Range | Default |
+|----|---------|-------|---------|
+| `inputGain` | Gain Stage | −12 to +24 dB | 0 dB |
+| `tone` | Gain Stage | 100 Hz – 20 kHz | 20 kHz (open) |
+| `drive` | Gain Stage | 0 – 100% | 0% |
+| `outputGain` | Gain Stage | −20 to +12 dB | 0 dB |
+| `voices` | Unison | 1 – 8 (int) | 3 |
+| `detune` | Unison | 0 – 50 cents | 0 cts |
+| `unisonMix` | Unison | 0 – 100% | 0% |
+| `envFreq` | Env Filter | 200 Hz – 8 kHz | 4 kHz |
+| `envSens` | Env Filter | 0 – 100% | 0% (bypass) |
+| `envRes` | Env Filter | 0 – 100% | 0% |
 
-- `armed` flag provides hysteresis: a reset only fires if the signal has gone negative since the last reset, preventing false re-triggers on the same rising edge or from harmonics.
-- The drive stage upstream (tanh saturation in `processBlock`) is critical: it squares up the signal so each fundamental period has exactly one dominant rising zero crossing.
-- Slew rate is calibrated so the ramp covers its full −1→+1 range in one period at 25 Hz. Notes above 25 Hz rise less far; the peak-follower normalizer compensates.
-- The peak follower operates on `slewPrev + 1.0` (positive-shifted to [0, 2]) so it tracks only the upward excursion. Noise gate threshold is 0.005 (≈ −46 dB).
-- A 1st-order DC blocker (R = 0.9995, ≈3.5 Hz cutoff) follows normalization as a safety measure; a full sawtooth has near-zero DC so it rarely does significant work.
-- The input envelope follower's 3 ms attack suppresses any normalization transients at note onset.
-- `juce::ScopedNoDenormals` is set in `processBlock` to prevent denormal CPU spikes.
+## Known Issues / Outstanding Work
+
+- **Attack latency feel**: the ZCD needs at least one zero crossing before locking on, so the first cycle or two of a new note outputs a partial ramp rather than a clean saw. Makes the onset feel slightly slow.
+- **Residual crackling on high notes**: the half-period guard and TONE filter reduce false triggers significantly, but harmonics can still slip through with high-gain sources or TONE fully open.
