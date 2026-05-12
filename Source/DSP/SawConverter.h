@@ -20,7 +20,7 @@ public:
 
         peakAtk = coeff(0.0001f);
         peakRel = coeff(0.3f);
-        envAtk  = coeff(0.001f);  // 1 ms — snappier onset; 3 ms felt slow on guitar
+        envAtk  = coeff(0.0001f);  // 0.1 ms — fast enough to be imperceptible at onset
         envRel  = coeff(0.08f);
 
         reset();
@@ -32,6 +32,7 @@ public:
         peakEnv            = 0.0f;
         dcX1 = dcY1        = 0.0f;
         inputEnv           = 0.0f;
+        recentInputPeak    = 0.0f;
         samplesSinceCross  = 0;
         smoothedPeriod     = 0.0f;
         periodValid        = false;
@@ -67,9 +68,23 @@ public:
             samplesSinceCross = 0;
             armed    = false;
             slewPrev = -1.0f;
+
+            // Pre-charge inputEnv to last cycle's peak so note onsets are
+            // instantaneous rather than fading in from 0.
+            inputEnv        = recentInputPeak;
+            recentInputPeak = 0.0f;
+
+            // Pre-charge peakEnv to the expected ramp amplitude for this pitch.
+            // Without this, a note played after a lower-frequency note inherits a
+            // peakEnv that's too high, producing LF amplitude drift until peakEnv
+            // finally decays to the correct level (which can take seconds).
+            if (periodValid)
+                peakEnv = std::min(slewRate * smoothedPeriod, 2.0f);
         } else {
             slewPrev = std::min(slewPrev + slewRate, 1.0f);
         }
+
+        recentInputPeak = std::max(recentInputPeak, std::abs(x));
 
         // 2. Amplitude normalization via peak follower.
         const float shifted = slewPrev + 1.0f;   // [0, 2] at low freq, smaller at high
@@ -115,8 +130,9 @@ private:
     float dcX1 = 0.0f, dcY1 = 0.0f;
     static constexpr float dcCoeff = 0.9995f;
 
-    float inputEnv = 0.0f;
-    float envAtk   = 0.0f, envRel = 0.0f;
+    float inputEnv      = 0.0f;
+    float recentInputPeak = 0.0f;
+    float envAtk        = 0.0f, envRel = 0.0f;
 
     float coeff(float t) const noexcept {
         return std::exp(-1.0f / (t * sr));
