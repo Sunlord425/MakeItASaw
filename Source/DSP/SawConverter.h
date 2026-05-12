@@ -45,12 +45,17 @@ public:
             periodValid = false;
 
         // 1. Rising zero-crossing detector with armed hysteresis.
-        if (x < 0.0f)
+        // Threshold of -0.01 prevents tiny harmonic dips from arming the trigger.
+        if (x < -0.01f)
             armed = true;
 
         if (armed && x >= 0.0f) {
-            // Reject spuriously fast crossings (< 10 samples ≈ > 4 kHz).
-            if (samplesSinceCross >= 10) {
+            // When period is known, require at least half a period between resets so
+            // harmonics within the same cycle cannot cause spurious re-triggers.
+            const int minGap = periodValid
+                ? std::max(10, static_cast<int>(smoothedPeriod * 0.5f))
+                : 10;
+            if (samplesSinceCross >= minGap) {
                 const float raw = static_cast<float>(samplesSinceCross);
                 smoothedPeriod = periodValid ? 0.9f * smoothedPeriod + 0.1f * raw : raw;
                 periodValid    = true;
