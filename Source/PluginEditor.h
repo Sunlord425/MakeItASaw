@@ -14,8 +14,8 @@ private:
     SawPluginProcessor& proc;
 
     // Gain Stage
-    juce::Slider inputGainKnob, toneKnob, driveKnob, outputGainKnob;
-    juce::Label  inputGainLabel, toneLabel, driveLabel, outputGainLabel;
+    juce::Slider inputGainKnob, toneKnob, driveKnob, outputGainKnob, dryWetKnob;
+    juce::Label  inputGainLabel, toneLabel, driveLabel, outputGainLabel, dryWetLabel;
 
     // Unison
     juce::Slider voicesKnob, detuneKnob, unisonMixKnob;
@@ -27,7 +27,7 @@ private:
 
     // Attachments (declared after sliders — destruction order matters)
     juce::AudioProcessorValueTreeState::SliderAttachment
-        inputGainAttach, toneAttach, driveAttach, outputGainAttach,
+        inputGainAttach, toneAttach, driveAttach, outputGainAttach, dryWetAttach,
         voicesAttach, detuneAttach, unisonMixAttach,
         envFreqAttach, envSensAttach, envResAttach;
 

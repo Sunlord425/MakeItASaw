@@ -1,4 +1,4 @@
-# Saw
+# MakeItASaw
 
 An audio effect plugin that converts any monophonic pitched signal — guitar, bass, voice, synth — into a sawtooth wave in real time, without pitch tracking or FFT. The conversion is entirely analog-style DSP: a rising zero-crossing detector resets a ramp at each fundamental cycle.
 
@@ -11,8 +11,8 @@ An audio effect plugin that converts any monophonic pitched signal — guitar, b
 
 Pre-built installers are attached to each [GitHub Release](https://github.com/Sunlord425/MakeItASaw/releases):
 
-- **macOS** — `Saw-macOS.pkg`: double-click to install. Installs AU to `/Library/Audio/Plug-Ins/Components/` and VST3 to `/Library/Audio/Plug-Ins/VST3/`. You can deselect either format during installation.
-- **Windows** — `Saw-x.x.x-Windows.exe`: run as Administrator. Installs VST3 to `C:\Program Files\Common Files\VST3\`.
+- **macOS** — `MakeItASaw-macOS.pkg`: double-click to install. Installs AU to `/Library/Audio/Plug-Ins/Components/` and VST3 to `/Library/Audio/Plug-Ins/VST3/`. You can deselect either format during installation.
+- **Windows** — `MakeItASaw-x.x.x-Windows.exe`: run as Administrator. Installs VST3 to `C:\Program Files\Common Files\VST3\`.
 
 After installing on macOS, restart your DAW (or run `killall -9 AudioComponentRegistrar` in Terminal) to force a plugin rescan.
 
@@ -30,6 +30,7 @@ The UI is divided into three sections.
 | **TONE** | 1-pole low-pass pre-filter (100 Hz – 20 kHz). Rolling it down removes upper harmonics before the zero-crossing detector sees them, reducing false triggers and crackling — especially useful for guitar or instruments with strong overtones. Default is fully open. |
 | **DRIVE** | Soft-clip saturation (tanh) applied after TONE. Squares up the waveform so each period has one clean, dominant zero crossing. A moderate amount of drive generally improves tracking stability and sustain, particularly on guitar. |
 | **OUT GAIN** | Output level after all processing (−20 to +12 dB). |
+| **WET** | Dry/wet blend (0 – 100%). At 0% the plugin is fully bypassed and you hear the original signal; at 100% you hear only the processed sawtooth output. Default is 100%. |
 
 ### Unison
 
@@ -85,13 +86,13 @@ Artifacts land in `build/SawPlugin_artefacts/Debug/{AU,VST3,Standalone}/`.
 
 **Install on macOS (use `ditto`, not `cp` — preserves extended attributes):**
 ```bash
-ditto build/SawPlugin_artefacts/Debug/AU/Saw.component \
-      ~/Library/Audio/Plug-Ins/Components/Saw.component
-codesign -s - --force ~/Library/Audio/Plug-Ins/Components/Saw.component
+ditto "build/SawPlugin_artefacts/Debug/AU/MakeItASaw.component" \
+      ~/Library/Audio/Plug-Ins/Components/MakeItASaw.component
+codesign -s - --force ~/Library/Audio/Plug-Ins/Components/MakeItASaw.component
 
-ditto "build/SawPlugin_artefacts/Debug/VST3/Saw.vst3" \
-      ~/Library/Audio/Plug-Ins/VST3/Saw.vst3
-codesign -s - --force ~/Library/Audio/Plug-Ins/VST3/Saw.vst3
+ditto "build/SawPlugin_artefacts/Debug/VST3/MakeItASaw.vst3" \
+      ~/Library/Audio/Plug-Ins/VST3/MakeItASaw.vst3
+codesign -s - --force ~/Library/Audio/Plug-Ins/VST3/MakeItASaw.vst3
 ```
 
 ---
@@ -99,5 +100,5 @@ codesign -s - --force ~/Library/Audio/Plug-Ins/VST3/Saw.vst3
 ## Known Limitations
 
 - **Note onset**: the first cycle of a new note may sound slightly flat while the zero-crossing detector locks on. This is intrinsic to the ZCD approach and is most noticeable at low tempos or with slow attacks.
+- **Crackling on high notes**: harmonics can cause false zero-crossing triggers even with TONE rolled off and DRIVE applied. This is most pronounced above the 12th fret on guitar or with instruments that have strong upper partials. Using DRIVE (20–40%) and rolling TONE to 2–4 kHz reduces it significantly.
 - **Monophonic only**: chords or simultaneous pitches are not supported and will produce glitched output.
-- **macOS only** at this time (AU + VST3). Windows VST3 is not yet packaged.

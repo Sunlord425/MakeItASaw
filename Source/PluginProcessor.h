@@ -59,6 +59,7 @@ private:
     std::atomic<float>* envFreqParam    = nullptr;
     std::atomic<float>* envSensParam    = nullptr;
     std::atomic<float>* envResParam     = nullptr;
+    std::atomic<float>* dryWetParam     = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SawPluginProcessor)
 };

@@ -1,12 +1,12 @@
-!define PRODUCT_NAME "Saw"
+!define PRODUCT_NAME "MakeItASaw"
 !define PRODUCT_VERSION "0.1.0"
 !define PUBLISHER "LorenzoMazzeo"
-!define VST3_SRC "Saw.vst3"
+!define VST3_SRC "MakeItASaw.vst3"
 !define VST3_DEST "$COMMONPROGRAMFILES64\VST3"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 
 Name "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile "Saw-${PRODUCT_VERSION}-Windows.exe"
+OutFile "MakeItASaw-${PRODUCT_VERSION}-Windows.exe"
 InstallDir "${VST3_DEST}"
 RequestExecutionLevel admin
 SetCompressor /SOLID lzma
@@ -26,11 +26,11 @@ Section "VST3 Plugin" SecVST3
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoModify" 1
     WriteRegDWORD HKLM "${UNINSTALL_KEY}" "NoRepair" 1
 
-    WriteUninstaller "$INSTDIR\uninstall-saw.exe"
+    WriteUninstaller "$INSTDIR\uninstall-makeitasaw.exe"
 SectionEnd
 
 Section "Uninstall"
-    RMDir /r "${VST3_DEST}\Saw.vst3"
-    Delete "${VST3_DEST}\uninstall-saw.exe"
+    RMDir /r "${VST3_DEST}\MakeItASaw.vst3"
+    Delete "${VST3_DEST}\uninstall-makeitasaw.exe"
     DeleteRegKey HKLM "${UNINSTALL_KEY}"
 SectionEnd

@@ -11,6 +11,7 @@ SawPluginEditor::SawPluginEditor(SawPluginProcessor& p)
       toneAttach      (p.apvts, "tone",        toneKnob),
       driveAttach     (p.apvts, "drive",       driveKnob),
       outputGainAttach(p.apvts, "outputGain",  outputGainKnob),
+      dryWetAttach    (p.apvts, "dryWet",      dryWetKnob),
       voicesAttach    (p.apvts, "voices",      voicesKnob),
       detuneAttach    (p.apvts, "detune",      detuneKnob),
       unisonMixAttach (p.apvts, "unisonMix",   unisonMixKnob),
@@ -23,7 +24,7 @@ SawPluginEditor::SawPluginEditor(SawPluginProcessor& p)
         s.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 16);
         addAndMakeVisible(s);
     };
-    for (auto* s : { &inputGainKnob, &toneKnob, &driveKnob, &outputGainKnob,
+    for (auto* s : { &inputGainKnob, &toneKnob, &driveKnob, &outputGainKnob, &dryWetKnob,
                      &voicesKnob, &detuneKnob, &unisonMixKnob,
                      &envFreqKnob, &envSensKnob, &envResKnob })
         setupKnob(*s);
@@ -39,6 +40,7 @@ SawPluginEditor::SawPluginEditor(SawPluginProcessor& p)
     setupLabel(toneLabel,       "TONE");
     setupLabel(driveLabel,      "DRIVE");
     setupLabel(outputGainLabel, "OUT GAIN");
+    setupLabel(dryWetLabel,     "WET");
     setupLabel(voicesLabel,     "VOICES");
     setupLabel(detuneLabel,     "DETUNE");
     setupLabel(unisonMixLabel,  "MIX");
@@ -57,7 +59,7 @@ void SawPluginEditor::paint(juce::Graphics& g) {
 
     g.setColour(juce::Colours::white.withAlpha(0.85f));
     g.setFont(juce::Font(juce::FontOptions{}.withHeight(26.0f)));
-    g.drawText("SAW", 0, 0, getWidth(), kTitleH, juce::Justification::centred);
+    g.drawText("MAKE IT A SAW", 0, 0, getWidth(), kTitleH, juce::Justification::centred);
 
     auto drawSection = [&](juce::Rectangle<int> b, const char* title) {
         g.setColour(juce::Colours::white.withAlpha(0.05f));
@@ -77,10 +79,10 @@ void SawPluginEditor::resized() {
     const int secY = kTitleH + kPad;
     const int secH = getHeight() - secY - kPad;
 
-    // Widths proportional to knob count (4 : 3 : 3 = 10 total)
+    // Widths proportional to knob count (5 : 3 : 3 = 11 total)
     const int totalW  = getWidth() - 2 * kPad - 2 * kPad;  // outer + inter-section gaps
-    const int gainW   = totalW * 4 / 10;
-    const int unisonW = totalW * 3 / 10;
+    const int gainW   = totalW * 5 / 11;
+    const int unisonW = totalW * 3 / 11;
     const int envW    = totalW - gainW - unisonW;
 
     gainBounds   = { kPad,                             secY, gainW,   secH };
@@ -109,6 +111,7 @@ void SawPluginEditor::resized() {
         { &toneKnob,       &toneLabel       },
         { &driveKnob,      &driveLabel      },
         { &outputGainKnob, &outputGainLabel },
+        { &dryWetKnob,     &dryWetLabel     },
     });
     place(unisonBounds, {
         { &voicesKnob,    &voicesLabel    },

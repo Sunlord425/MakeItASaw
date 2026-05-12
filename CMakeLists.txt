@@ -25,7 +25,7 @@ juce_add_plugin(SawPlugin
     PLUGIN_MANUFACTURER_CODE    Lmaz
     PLUGIN_CODE                 SawP
     FORMATS                     ${PLUGIN_FORMATS}
-    PRODUCT_NAME                "Saw"
+    PRODUCT_NAME                "MakeItASaw"
     DESCRIPTION                 "Monophonic to sawtooth converter"
     IS_SYNTH                    FALSE
     NEEDS_MIDI_INPUT            FALSE

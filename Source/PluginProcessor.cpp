@@ -5,7 +5,7 @@ SawPluginProcessor::SawPluginProcessor()
     : AudioProcessor(BusesProperties()
         .withInput ("Input",  juce::AudioChannelSet::stereo(), true)
         .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "SAW_STATE", createLayout())
+      apvts(*this, nullptr, "MAKEITASAW_STATE", createLayout())
 {}
 
 juce::AudioProcessorValueTreeState::ParameterLayout SawPluginProcessor::createLayout() {
@@ -80,6 +80,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout SawPluginProcessor::createLa
         juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
             [](float v, int) { return juce::String(v, 1) + "%"; })));
 
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"dryWet", 1}, "Dry/Wet Mix",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 100.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
+            [](float v, int) { return juce::String(v, 1) + "%"; })));
+
     return { params.begin(), params.end() };
 }
 
@@ -120,6 +126,7 @@ void SawPluginProcessor::prepareToPlay(double sampleRate, int) {
     envFreqParam    = apvts.getRawParameterValue("envFreq");
     envSensParam    = apvts.getRawParameterValue("envSens");
     envResParam     = apvts.getRawParameterValue("envRes");
+    dryWetParam     = apvts.getRawParameterValue("dryWet");
 }
 
 void SawPluginProcessor::releaseResources() {
@@ -134,6 +141,7 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     juce::ScopedNoDenormals noDenormals;
 
     const float inputGainLin  = juce::Decibels::decibelsToGain(inputGainParam->load());
+    const float dryWetMix     = dryWetParam->load() / 100.0f;
     const float toneCutoff    = toneParam->load();
     const float drivePercent  = driveParam->load();
     const int   numExtra      = juce::roundToInt(voicesParam->load()) - 1;
@@ -197,7 +205,8 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
         }
 
         for (int i = 0; i < numSamples; ++i) {
-            float x = data[i] * inputGainLin;
+            const float dry = data[i];
+            float x = dry * inputGainLin;
             toneZ += toneA * (x - toneZ);
             x = toneZ;
             if (hasDrive) x = std::tanh(driveK * x);
@@ -226,7 +235,8 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
                 output = y;
             }
 
-            data[i] = output * outputGainLin;
+            const float wetOut = output * outputGainLin;
+            data[i] = dry + dryWetMix * (wetOut - dry);
         }
     }
 }

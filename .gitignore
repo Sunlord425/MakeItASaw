@@ -1,5 +1,5 @@
 build/
 .DS_Store
 compile_commands.json
-packaging/windows/Saw.vst3/
-packaging/windows/Saw-*.exe
+packaging/windows/MakeItASaw.vst3/
+packaging/windows/MakeItASaw-*.exe

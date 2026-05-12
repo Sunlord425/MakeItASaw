@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A DAW plugin that converts any arbitrary pitched monophonic input signal into a sawtooth wave. The core constraint is **no FFT or pitch-tracking algorithms** — the conversion is achieved entirely through analog-style DSP signal processing.
+**MakeItASaw** — a DAW plugin that converts any arbitrary pitched monophonic input signal into a sawtooth wave. The core constraint is **no FFT or pitch-tracking algorithms** — the conversion is achieved entirely through analog-style DSP signal processing.
 
 Plugin format targets: VST3, AU (macOS only), Standalone. Built with **JUCE 8.0.6** via CMake FetchContent. Releases are built by GitHub Actions and distributed as signed installers (`.pkg` for macOS, NSIS `.exe` for Windows).
 
@@ -96,6 +96,7 @@ Source/
 | `tone` | Gain Stage | 100 Hz – 20 kHz | 20 kHz (open) |
 | `drive` | Gain Stage | 0 – 100% | 0% |
 | `outputGain` | Gain Stage | −20 to +12 dB | 0 dB |
+| `dryWet` | Gain Stage | 0 – 100% | 100% (fully wet) |
 | `voices` | Unison | 1 – 8 (int) | 3 |
 | `detune` | Unison | 0 – 50 cents | 0 cts |
 | `unisonMix` | Unison | 0 – 100% | 0% |
