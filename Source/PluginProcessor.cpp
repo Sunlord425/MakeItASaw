@@ -23,6 +23,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout SawPluginProcessor::createLa
         juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
             [](float v, int) { return juce::String(v, 1) + "%"; })));
 
+    params.push_back(std::make_unique<juce::AudioParameterInt>(
+        juce::ParameterID{"voices", 1}, "Voices", 1, 8, 3));
+
     params.push_back(std::make_unique<juce::AudioParameterFloat>(
         juce::ParameterID{"detune", 1}, "Detune",
         juce::NormalisableRange<float>(0.0f, 50.0f, 0.1f), 0.0f,
@@ -55,25 +58,23 @@ void SawPluginProcessor::prepareToPlay(double sampleRate, int) {
     const int numChannels = getTotalNumInputChannels();
     const auto n = static_cast<size_t>(numChannels);
 
-    converters  .resize(n);
-    shiftersUp  .resize(n);
-    shiftersDown.resize(n);
+    converters.resize(n);
+    shifters  .resize(n * kMaxVoices);
 
-    for (auto& c : converters)   c.prepare(sampleRate);
-    for (auto& s : shiftersUp)   s.reset();
-    for (auto& s : shiftersDown) s.reset();
+    for (auto& c : converters) c.prepare(sampleRate);
+    for (auto& s : shifters)   s.reset();
 
     inputGainParam  = apvts.getRawParameterValue("inputGain");
     driveParam      = apvts.getRawParameterValue("drive");
+    voicesParam     = apvts.getRawParameterValue("voices");
     detuneParam     = apvts.getRawParameterValue("detune");
     unisonMixParam  = apvts.getRawParameterValue("unisonMix");
     outputGainParam = apvts.getRawParameterValue("outputGain");
 }
 
 void SawPluginProcessor::releaseResources() {
-    for (auto& c : converters)   c.reset();
-    for (auto& s : shiftersUp)   s.reset();
-    for (auto& s : shiftersDown) s.reset();
+    for (auto& c : converters) c.reset();
+    for (auto& s : shifters)   s.reset();
 }
 
 void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -81,26 +82,32 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     const float inputGainLin  = juce::Decibels::decibelsToGain(inputGainParam->load());
     const float drivePercent  = driveParam->load();
+    const int   numExtra      = juce::roundToInt(voicesParam->load()) - 1;  // extra voices beyond main
     const float detuneCents   = detuneParam->load();
     const float wet           = unisonMixParam->load() / 100.0f;
     const float outputGainLin = juce::Decibels::decibelsToGain(outputGainParam->load());
 
-    const float driveK   = 1.0f + drivePercent * 0.09f;
-    const bool  hasDrive = drivePercent > 0.5f;
-    const bool  hasUnison = wet > 0.001f;
+    const float driveK    = 1.0f + drivePercent * 0.09f;
+    const bool  hasDrive  = drivePercent > 0.5f;
+    const bool  hasUnison = numExtra > 0 && wet > 0.001f;
 
-    // Compute pitch ratios once per block
-    const float ratioUp   = std::exp2( detuneCents / 1200.0f);
-    const float ratioDown = std::exp2(-detuneCents / 1200.0f);
+    // Detune ratios spread from -detuneCents to +detuneCents across numExtra voices.
+    // Computed once per block and cached to avoid exp2 in the sample loop.
+    float voiceRatios[kMaxVoices];
+    if (hasUnison) {
+        for (int v = 0; v < numExtra; ++v) {
+            const float t     = (numExtra > 1) ? (float)v / (float)(numExtra - 1) : 1.0f;
+            const float cents = detuneCents * (2.0f * t - 1.0f);
+            voiceRatios[v] = std::exp2(cents / 1200.0f);
+        }
+    }
 
     const int numChannels = buffer.getNumChannels();
     const int numSamples  = buffer.getNumSamples();
 
     for (int ch = 0; ch < numChannels && ch < static_cast<int>(converters.size()); ++ch) {
-        float* data   = buffer.getWritePointer(ch);
-        auto&  conv   = converters  [static_cast<size_t>(ch)];
-        auto&  shiftU = shiftersUp  [static_cast<size_t>(ch)];
-        auto&  shiftD = shiftersDown[static_cast<size_t>(ch)];
+        float* data = buffer.getWritePointer(ch);
+        auto&  conv = converters[static_cast<size_t>(ch)];
 
         for (int i = 0; i < numSamples; ++i) {
             float x = data[i] * inputGainLin;
@@ -111,14 +118,11 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
             float output = mainSaw;
             if (hasUnison) {
-                // Pitch-shift the saw output itself — not a synthetic oscillator.
-                // The phase offset introduced by the delay buffers creates the
-                // chorusing spread of a natural unison sound.
-                const float up   = shiftU.process(mainSaw, ratioUp);
-                const float down = shiftD.process(mainSaw, ratioDown);
+                float voiceSum = 0.0f;
+                for (int v = 0; v < numExtra; ++v)
+                    voiceSum += shifters[static_cast<size_t>(ch * kMaxVoices + v)].process(mainSaw, voiceRatios[v]);
 
-                // Normalised 3-voice blend: main always present, detuned voices at `wet`
-                output = (mainSaw + wet * (up + down)) / (1.0f + 2.0f * wet);
+                output = (mainSaw + wet * voiceSum) / (1.0f + wet * (float)numExtra);
             }
 
             data[i] = output * outputGainLin;

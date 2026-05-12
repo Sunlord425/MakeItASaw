@@ -17,7 +17,7 @@ class PitchShifter {
 public:
     static constexpr int kBufLen   = 512;
     static constexpr int kMask     = kBufLen - 1;
-    static constexpr int kXfadeLen = 64;    // ~1.5 ms at 44.1 kHz
+    static constexpr int kXfadeLen = 128;   // ~2.9 ms at 44.1 kHz — longer window reduces glitches on high notes
 
     void reset() noexcept {
         std::fill(buf, buf + kBufLen, 0.0f);
@@ -43,8 +43,9 @@ public:
 
         float out;
         if (xfadeCount >= 0) {
-            const float t = static_cast<float>(xfadeCount) / static_cast<float>(kXfadeLen);
-            out = lerp(readA) * (1.0f - t) + lerp(readB) * t;
+            const float t     = static_cast<float>(xfadeCount) / static_cast<float>(kXfadeLen);
+            const float tCos  = 0.5f - 0.5f * std::cos(t * 3.14159265f);
+            out = lerp(readA) * (1.0f - tCos) + lerp(readB) * tCos;
 
             readB += ratio;
             if (readB >= kBufLen) readB -= kBufLen;

@@ -13,11 +13,11 @@ public:
 private:
     SawPluginProcessor& proc;
 
-    juce::Slider inputGainKnob, driveKnob, detuneKnob, unisonMixKnob, outputGainKnob;
-    juce::Label  inputGainLabel, driveLabel, detuneLabel, unisonMixLabel, outputGainLabel;
+    juce::Slider inputGainKnob, driveKnob, voicesKnob, detuneKnob, unisonMixKnob, outputGainKnob;
+    juce::Label  inputGainLabel, driveLabel, voicesLabel, detuneLabel, unisonMixLabel, outputGainLabel;
 
     juce::AudioProcessorValueTreeState::SliderAttachment
-        inputGainAttach, driveAttach, detuneAttach, unisonMixAttach, outputGainAttach;
+        inputGainAttach, driveAttach, voicesAttach, detuneAttach, unisonMixAttach, outputGainAttach;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SawPluginEditor)
 };

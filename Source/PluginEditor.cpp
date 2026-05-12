@@ -3,12 +3,13 @@
 static constexpr int kTitleH  = 48;
 static constexpr int kLabelH  = 22;
 static constexpr int kPad     = 12;
-static constexpr int kNumKnobs = 5;
+static constexpr int kNumKnobs = 6;
 
 SawPluginEditor::SawPluginEditor(SawPluginProcessor& p)
     : AudioProcessorEditor(&p), proc(p),
       inputGainAttach (p.apvts, "inputGain",  inputGainKnob),
       driveAttach     (p.apvts, "drive",       driveKnob),
+      voicesAttach    (p.apvts, "voices",      voicesKnob),
       detuneAttach    (p.apvts, "detune",      detuneKnob),
       unisonMixAttach (p.apvts, "unisonMix",   unisonMixKnob),
       outputGainAttach(p.apvts, "outputGain",  outputGainKnob)
@@ -20,6 +21,7 @@ SawPluginEditor::SawPluginEditor(SawPluginProcessor& p)
     };
     setupKnob(inputGainKnob);
     setupKnob(driveKnob);
+    setupKnob(voicesKnob);
     setupKnob(detuneKnob);
     setupKnob(unisonMixKnob);
     setupKnob(outputGainKnob);
@@ -33,11 +35,12 @@ SawPluginEditor::SawPluginEditor(SawPluginProcessor& p)
     };
     setupLabel(inputGainLabel,  "IN GAIN");
     setupLabel(driveLabel,      "DRIVE");
+    setupLabel(voicesLabel,     "VOICES");
     setupLabel(detuneLabel,     "DETUNE");
     setupLabel(unisonMixLabel,  "MIX");
     setupLabel(outputGainLabel, "OUT GAIN");
 
-    setSize(440, 210);
+    setSize(528, 210);
 }
 
 void SawPluginEditor::paint(juce::Graphics& g) {
@@ -63,7 +66,8 @@ void SawPluginEditor::resized() {
 
     place(inputGainKnob,  inputGainLabel,  0);
     place(driveKnob,      driveLabel,      1);
-    place(detuneKnob,     detuneLabel,     2);
-    place(unisonMixKnob,  unisonMixLabel,  3);
-    place(outputGainKnob, outputGainLabel, 4);
+    place(voicesKnob,     voicesLabel,     2);
+    place(detuneKnob,     detuneLabel,     3);
+    place(unisonMixKnob,  unisonMixLabel,  4);
+    place(outputGainKnob, outputGainLabel, 5);
 }

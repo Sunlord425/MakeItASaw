@@ -39,11 +39,14 @@ public:
     static juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
 private:
+    static constexpr int kMaxVoices = 8;
+
     std::vector<SawConverter> converters;
-    std::vector<PitchShifter> shiftersUp, shiftersDown;  // one per channel, ±detune
+    std::vector<PitchShifter> shifters;  // numChannels * kMaxVoices, flat
 
     std::atomic<float>* inputGainParam  = nullptr;
     std::atomic<float>* driveParam      = nullptr;
+    std::atomic<float>* voicesParam     = nullptr;
     std::atomic<float>* detuneParam     = nullptr;
     std::atomic<float>* unisonMixParam  = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
