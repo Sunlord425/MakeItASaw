@@ -46,6 +46,8 @@ private:
     std::vector<SawConverter> converters;
     std::vector<PitchShifter> shifters;      // numChannels * kMaxVoices, flat
     std::vector<float>        toneState;     // 1-pole LP state, one per channel
+    std::vector<float>        svfLow, svfBand, envFollower;  // envelope filter state
+    float envAtkCoeff = 0.0f, envRelCoeff = 0.0f;
 
     std::atomic<float>* inputGainParam  = nullptr;
     std::atomic<float>* toneParam       = nullptr;
@@ -54,6 +56,9 @@ private:
     std::atomic<float>* detuneParam     = nullptr;
     std::atomic<float>* unisonMixParam  = nullptr;
     std::atomic<float>* outputGainParam = nullptr;
+    std::atomic<float>* envFreqParam    = nullptr;
+    std::atomic<float>* envSensParam    = nullptr;
+    std::atomic<float>* envResParam     = nullptr;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SawPluginProcessor)
 };

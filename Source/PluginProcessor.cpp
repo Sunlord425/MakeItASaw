@@ -56,6 +56,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout SawPluginProcessor::createLa
         juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
             [](float v, int) { return juce::String(v, 1) + " dB"; })));
 
+    {
+        juce::NormalisableRange<float> freqRange(200.0f, 8000.0f);
+        freqRange.setSkewForCentre(1200.0f);
+        params.push_back(std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{"envFreq", 1}, "Env Freq", freqRange, 4000.0f,
+            juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
+                [](float v, int) -> juce::String {
+                    return v >= 1000.0f ? juce::String(v / 1000.0f, 1) + " kHz"
+                                       : juce::String((int)v) + " Hz";
+                })));
+    }
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"envSens", 1}, "Env Sens",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 0.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
+            [](float v, int) { return juce::String(v, 1) + "%"; })));
+
+    params.push_back(std::make_unique<juce::AudioParameterFloat>(
+        juce::ParameterID{"envRes", 1}, "Env Res",
+        juce::NormalisableRange<float>(0.0f, 100.0f, 0.1f), 0.0f,
+        juce::AudioParameterFloatAttributes{}.withStringFromValueFunction(
+            [](float v, int) { return juce::String(v, 1) + "%"; })));
+
     return { params.begin(), params.end() };
 }
 
@@ -72,12 +96,19 @@ void SawPluginProcessor::prepareToPlay(double sampleRate, int) {
     const int numChannels = getTotalNumInputChannels();
     const auto n = static_cast<size_t>(numChannels);
 
-    converters.resize(n);
-    shifters  .resize(n * kMaxVoices);
-    toneState .assign(n, 0.0f);
+    converters  .resize(n);
+    shifters    .resize(n * kMaxVoices);
+    toneState   .assign(n, 0.0f);
+    svfLow      .assign(n, 0.0f);
+    svfBand     .assign(n, 0.0f);
+    envFollower .assign(n, 0.0f);
 
     for (auto& c : converters) c.prepare(sampleRate);
     for (auto& s : shifters)   s.reset();
+
+    const float sr_f = static_cast<float>(sampleRate);
+    envAtkCoeff = std::exp(-1.0f / (0.003f * sr_f));   // 3 ms attack
+    envRelCoeff = std::exp(-1.0f / (0.150f * sr_f));   // 150 ms release
 
     inputGainParam  = apvts.getRawParameterValue("inputGain");
     toneParam       = apvts.getRawParameterValue("tone");
@@ -86,11 +117,17 @@ void SawPluginProcessor::prepareToPlay(double sampleRate, int) {
     detuneParam     = apvts.getRawParameterValue("detune");
     unisonMixParam  = apvts.getRawParameterValue("unisonMix");
     outputGainParam = apvts.getRawParameterValue("outputGain");
+    envFreqParam    = apvts.getRawParameterValue("envFreq");
+    envSensParam    = apvts.getRawParameterValue("envSens");
+    envResParam     = apvts.getRawParameterValue("envRes");
 }
 
 void SawPluginProcessor::releaseResources() {
     for (auto& c : converters) c.reset();
     for (auto& s : shifters)   s.reset();
+    std::fill(svfLow    .begin(), svfLow    .end(), 0.0f);
+    std::fill(svfBand   .begin(), svfBand   .end(), 0.0f);
+    std::fill(envFollower.begin(), envFollower.end(), 0.0f);
 }
 
 void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) {
@@ -103,16 +140,18 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
     const float detuneCents   = detuneParam->load();
     const float wet           = unisonMixParam->load() / 100.0f;
     const float outputGainLin = juce::Decibels::decibelsToGain(outputGainParam->load());
+    const float envFreqHz     = envFreqParam->load();
+    const float envSensPct    = envSensParam->load();
+    const float envResPct     = envResParam->load();
 
-    // 1-pole LP coefficient: a = 1 - exp(-2π·fc/sr). At fc=20kHz → nearly all-pass.
-    const float toneA  = 1.0f - std::exp(-6.2832f * toneCutoff / (float)currentSampleRate);
-    const float driveK = 1.0f + drivePercent * 0.09f;
+    const float sr_f      = static_cast<float>(currentSampleRate);
+    const float toneA     = 1.0f - std::exp(-6.2832f * toneCutoff / sr_f);
+    const float driveK    = 1.0f + drivePercent * 0.09f;
     const bool  hasDrive  = drivePercent > 0.5f;
     const bool  hasUnison = numExtra > 0 && wet > 0.001f;
-
-    // Equal-power normalization denominator: sqrt(1 + wet·N) keeps perceived loudness
-    // stable as voice count increases despite partial phase cancellation between voices.
+    const bool  hasEnvF   = envSensPct > 0.1f;
     const float normDenom = std::sqrt(1.0f + wet * (float)numExtra);
+    const float envBlend  = envResPct / 100.0f;  // 0 = LP output, 1 = BP output (wah)
 
     float voiceRatios[kMaxVoices];
     if (hasUnison) {
@@ -128,18 +167,28 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
 
     for (int ch = 0; ch < numChannels && ch < static_cast<int>(converters.size()); ++ch) {
         float* data  = buffer.getWritePointer(ch);
-        auto&  conv  = converters[static_cast<size_t>(ch)];
-        float& toneZ = toneState [static_cast<size_t>(ch)];
+        auto&  conv  = converters  [static_cast<size_t>(ch)];
+        float& toneZ = toneState   [static_cast<size_t>(ch)];
+        float& envF  = envFollower [static_cast<size_t>(ch)];
+        float& low   = svfLow      [static_cast<size_t>(ch)];
+        float& band  = svfBand     [static_cast<size_t>(ch)];
+
+        // SVF coefficients computed once per block from last block's envelope.
+        // One sin() call per channel per block — negligible cost.
+        float svfF = 0.0f, svfQ = 2.0f;
+        if (hasEnvF) {
+            const float minFreq = envFreqHz * std::exp2(-envSensPct / 100.0f * 3.0f);
+            const float effFreq = juce::jlimit(50.0f, sr_f * 0.45f,
+                                               minFreq + envF * (envFreqHz - minFreq));
+            svfF = 2.0f * std::sin(3.14159265f * effFreq / sr_f);
+            svfQ = juce::jlimit(0.1f, 2.0f, 2.0f - envResPct / 100.0f * 1.8f);
+        }
 
         for (int i = 0; i < numSamples; ++i) {
             float x = data[i] * inputGainLin;
-
-            // Pre-filter: 1-pole LP before drive to suppress harmonics entering the ZCD.
             toneZ += toneA * (x - toneZ);
             x = toneZ;
-
-            if (hasDrive)
-                x = std::tanh(driveK * x);
+            if (hasDrive) x = std::tanh(driveK * x);
 
             const float mainSaw = conv.process(x);
 
@@ -148,8 +197,20 @@ void SawPluginProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mi
                 float voiceSum = 0.0f;
                 for (int v = 0; v < numExtra; ++v)
                     voiceSum += shifters[static_cast<size_t>(ch * kMaxVoices + v)].process(mainSaw, voiceRatios[v]);
-
                 output = (mainSaw + wet * voiceSum) / normDenom;
+            }
+
+            // Envelope follower on saw output (feeds next block's SVF coefficients).
+            const float absOut = std::abs(output);
+            const float ec = absOut > envF ? envAtkCoeff : envRelCoeff;
+            envF = ec * envF + (1.0f - ec) * absOut;
+
+            // State-variable filter: LP output blended with BP for resonant wah character.
+            if (hasEnvF) {
+                const float high = output - low - svfQ * band;
+                band += svfF * high;
+                low  += svfF * band;
+                output = low * (1.0f - envBlend) + band * envBlend;
             }
 
             data[i] = output * outputGainLin;

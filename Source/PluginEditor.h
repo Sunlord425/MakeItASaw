@@ -13,11 +13,26 @@ public:
 private:
     SawPluginProcessor& proc;
 
-    juce::Slider inputGainKnob, toneKnob, driveKnob, voicesKnob, detuneKnob, unisonMixKnob, outputGainKnob;
-    juce::Label  inputGainLabel, toneLabel, driveLabel, voicesLabel, detuneLabel, unisonMixLabel, outputGainLabel;
+    // Gain Stage
+    juce::Slider inputGainKnob, toneKnob, driveKnob, outputGainKnob;
+    juce::Label  inputGainLabel, toneLabel, driveLabel, outputGainLabel;
 
+    // Unison
+    juce::Slider voicesKnob, detuneKnob, unisonMixKnob;
+    juce::Label  voicesLabel, detuneLabel, unisonMixLabel;
+
+    // Env Filter
+    juce::Slider envFreqKnob, envSensKnob, envResKnob;
+    juce::Label  envFreqLabel, envSensLabel, envResLabel;
+
+    // Attachments (declared after sliders — destruction order matters)
     juce::AudioProcessorValueTreeState::SliderAttachment
-        inputGainAttach, toneAttach, driveAttach, voicesAttach, detuneAttach, unisonMixAttach, outputGainAttach;
+        inputGainAttach, toneAttach, driveAttach, outputGainAttach,
+        voicesAttach, detuneAttach, unisonMixAttach,
+        envFreqAttach, envSensAttach, envResAttach;
+
+    // Section bounds: set in resized(), read in paint()
+    juce::Rectangle<int> gainBounds, unisonBounds, envBounds;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SawPluginEditor)
 };
