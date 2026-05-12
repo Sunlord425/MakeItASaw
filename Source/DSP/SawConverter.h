@@ -20,7 +20,7 @@ public:
 
         peakAtk = coeff(0.0001f);
         peakRel = coeff(0.3f);
-        envAtk  = coeff(0.003f);
+        envAtk  = coeff(0.001f);  // 1 ms — snappier onset; 3 ms felt slow on guitar
         envRel  = coeff(0.08f);
 
         reset();
@@ -28,7 +28,7 @@ public:
 
     void reset() noexcept {
         slewPrev           = -1.0f;
-        armed              = false;
+        armed              = true;   // ready to fire on the very first rising edge
         peakEnv            = 0.0f;
         dcX1 = dcY1        = 0.0f;
         inputEnv           = 0.0f;
@@ -39,10 +39,14 @@ public:
 
     float process(float x) noexcept {
         // Period tracking — count samples since last rising crossing.
-        // Invalidate after 50 ms without a crossing (silence / very low freq).
+        // After 50 ms without a crossing (silence / very low freq), invalidate the
+        // period and re-arm so the next note's first rising edge fires immediately
+        // rather than waiting for a prior negative half-cycle.
         ++samplesSinceCross;
-        if (samplesSinceCross > static_cast<int>(sr * 0.05f))
+        if (samplesSinceCross > static_cast<int>(sr * 0.05f)) {
             periodValid = false;
+            armed       = true;
+        }
 
         // 1. Rising zero-crossing detector with armed hysteresis.
         // Threshold of -0.01 prevents tiny harmonic dips from arming the trigger.
