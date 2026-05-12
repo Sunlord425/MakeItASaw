@@ -2,7 +2,19 @@
 
 An audio effect plugin that converts any monophonic pitched signal — guitar, bass, voice, synth — into a sawtooth wave in real time, without pitch tracking or FFT. The conversion is entirely analog-style DSP: a rising zero-crossing detector resets a ramp at each fundamental cycle.
 
-Formats: **AU**, **VST3**, **Standalone** — macOS.
+| Platform | Formats |
+|----------|---------|
+| macOS | AU, VST3, Standalone |
+| Windows | VST3, Standalone |
+
+## Download
+
+Pre-built installers are attached to each [GitHub Release](https://github.com/Sunlord425/MakeItASaw/releases):
+
+- **macOS** — `Saw-macOS.pkg`: double-click to install. Installs AU to `/Library/Audio/Plug-Ins/Components/` and VST3 to `/Library/Audio/Plug-Ins/VST3/`. You can deselect either format during installation.
+- **Windows** — `Saw-x.x.x-Windows.exe`: run as Administrator. Installs VST3 to `C:\Program Files\Common Files\VST3\`.
+
+After installing on macOS, restart your DAW (or run `killall -9 AudioComponentRegistrar` in Terminal) to force a plugin rescan.
 
 ---
 
@@ -56,7 +68,8 @@ An envelope-controlled resonant low-pass filter (auto-wah). The filter's cutoff 
 
 ## Building from Source
 
-Requires: CMake ≥ 3.22, Xcode (macOS), internet access on first build (fetches JUCE 8.0.6).
+**macOS**: CMake ≥ 3.22, Xcode, internet access on first build (fetches JUCE 8.0.6).  
+**Windows**: CMake ≥ 3.22, Visual Studio 2022 (or Build Tools), internet access on first build.
 
 ```bash
 git clone https://github.com/Sunlord425/MakeItASaw.git
@@ -64,15 +77,19 @@ cd MakeItASaw
 
 # Debug build
 cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build --config Debug -- -j$(sysctl -n hw.logicalcpu)
+cmake --build build --config Debug -- -j$(sysctl -n hw.logicalcpu)   # macOS
+cmake --build build --config Debug                                     # Windows
+```
 
-# Install AU (macOS)
+Artifacts land in `build/SawPlugin_artefacts/Debug/{AU,VST3,Standalone}/`.
+
+**Install on macOS (use `ditto`, not `cp` — preserves extended attributes):**
+```bash
 ditto build/SawPlugin_artefacts/Debug/AU/Saw.component \
       ~/Library/Audio/Plug-Ins/Components/Saw.component
 codesign -s - --force ~/Library/Audio/Plug-Ins/Components/Saw.component
 
-# Install VST3 (macOS)
-ditto build/SawPlugin_artefacts/Debug/VST3/Saw.vst3 \
+ditto "build/SawPlugin_artefacts/Debug/VST3/Saw.vst3" \
       ~/Library/Audio/Plug-Ins/VST3/Saw.vst3
 codesign -s - --force ~/Library/Audio/Plug-Ins/VST3/Saw.vst3
 ```

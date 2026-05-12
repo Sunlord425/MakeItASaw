@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A DAW plugin that converts any arbitrary pitched monophonic input signal into a sawtooth wave. The core constraint is **no FFT or pitch-tracking algorithms** — the conversion is achieved entirely through analog-style DSP signal processing.
 
-Plugin format targets: VST3, AU (required), Standalone. Built with **JUCE 8.0.6** via CMake FetchContent.
+Plugin format targets: VST3, AU (macOS only), Standalone. Built with **JUCE 8.0.6** via CMake FetchContent. Releases are built by GitHub Actions and distributed as signed installers (`.pkg` for macOS, NSIS `.exe` for Windows).
 
 ## Signal Chain Architecture
 
@@ -31,6 +31,17 @@ Input → IN GAIN → TONE (1-pole LP) → DRIVE (tanh) → ZCD converter
 **UNISON** (`PitchShifter.h`): up to 8 delay-based pitch shifters per channel. Ratios spread evenly from −detune to +detune cents. Mix uses equal-power normalization (`sqrt(1 + wet·N)`) to keep perceived loudness stable as voice count grows. Crossfades use cosine windowing over 128 samples to reduce glitches.
 
 **ENV FILTER**: bilinear-transform biquad LP applied after unison mix. Cutoff is modulated by a per-channel envelope follower (3 ms attack, 150 ms release) tracking the saw output. SVF coefficients are computed once per block (one `sin`/`cos` call per channel). FREQ sets the peak cutoff at maximum envelope; SENS controls the sweep depth in octaves (0 = bypass); RES controls Q (0.5→10), which raises a resonant peak for the wah character. The biquad is unconditionally stable up to Nyquist (the old Chamberlin SVF was used previously and became unstable above ~sr/6).
+
+## Releasing
+
+Tag a commit to trigger the CI build and create a GitHub Release with installers attached:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow (`.github/workflows/build.yml`) runs two jobs — `build-macos` (macos-14) and `build-windows` (windows-latest) — then a `release` job that attaches the artifacts. macOS job produces `Saw-macOS.pkg` (combined AU + VST3 via `productbuild`); Windows job produces `Saw-0.1.0-Windows.exe` via NSIS. Packaging scripts live in `packaging/`.
 
 ## Build Commands
 
@@ -62,6 +73,13 @@ auval -v aufx SawP Lmaz              # type=aufx subtype=SawP manufacturer=Lmaz
 ## Code Structure
 
 ```
+packaging/
+├── mac/
+│   ├── postinstall      — kills AudioComponentRegistrar after pkg install
+│   └── distribution.xml — productbuild descriptor (AU + VST3 combined pkg)
+└── windows/
+    └── installer.nsi    — NSIS script; installs to %CommonProgramFiles64%\VST3
+
 Source/
 ├── DSP/
 │   ├── SawConverter.h   — ZCD-based mono→sawtooth converter (header-only)
