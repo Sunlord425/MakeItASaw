@@ -1,0 +1,19 @@
+The aim of this project is to create a digitial audio workstation plugin which turns any arbitrary pitched monophonic signal into a sawtooth wave without using FFT or any similar pitch tracking protocol which introduces significant latencey into the signal.
+Through some experimentation with modular synths, I've discoverd a signal chain which accomplishes this goal, producing decent results:
+1. comparator, which outputs a high voltage when the waveform is above the zero point, and a low voltage when it is below, creating a pulse wave from the signal
+2. some variety of fixed subtraction/bias to correct for the pulse wave always being above of at the zero point and thus asymmetrical
+3. a slew limiter only on the rise of the waveform, creating a ramp up then a sharp drop down
+4. something to normalize the amplitude of these waveforms as high pitched waveforms will naturally be quieter as they have less time to rise in between rarefactions
+5. something to make this normalized signal follow the amplitude of the input signal
+
+known limitation: this creates a waveform which is half saw and half flat, as during the time when the input waveform is below 0, the output of the comparator remains at 0. Could this be fixed using a copy of the waveform shifted 90 degrees out of phase and then summing the two, so that the rise of one wave fills in the gap of the other? Would doing so alter the pitch? Would one be able to get better results if they also flipped the shifted waveform (essentially multiplying by -1) before the two were summed?
+
+MVP: 
+Plugin that works as described above, with perhaps a fix for the limitation. Should be built for all common plugin types (VST, CLAP, VST3, ect.) with AU being an absolute requirement.
+
+Nice to have:
+Plugin also lets the user mix in detuned copies of the saw wave with the original signal.
+Overall mix knob
+Wah/envelope filter with resonance control to emulate synth timbres
+Onboard oscilloscope
+
