@@ -78,12 +78,13 @@ jobs:
         run: cmake --build build --config Release
 
       - name: Install NSIS
-        run: choco install nsis -y
+        run: choco install nsis -y --no-progress
 
       - name: Build Windows installer
-        shell: cmd
+        shell: pwsh
         run: |
-          xcopy /E /I "build\SawPlugin_artefacts\Release\VST3\MakeItASaw.vst3" "packaging\windows\MakeItASaw.vst3\"
+          $env:PATH += ";C:\Program Files (x86)\NSIS"
+          Copy-Item -Recurse -Force "build\SawPlugin_artefacts\Release\VST3\MakeItASaw.vst3" "packaging\windows\MakeItASaw.vst3"
           makensis packaging\windows\installer.nsi
 
       - name: Upload Windows installer
