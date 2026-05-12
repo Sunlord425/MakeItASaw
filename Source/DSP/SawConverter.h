@@ -20,7 +20,7 @@ public:
 
         peakAtk = coeff(0.0001f);
         peakRel = coeff(0.3f);
-        envAtk  = coeff(0.0001f);  // 0.1 ms — fast enough to be imperceptible at onset
+        envAtk  = coeff(0.0001f);  // 0.1 ms — sub-perceptible onset ramp
         envRel  = coeff(0.08f);
 
         reset();
@@ -32,10 +32,10 @@ public:
         peakEnv            = 0.0f;
         dcX1 = dcY1        = 0.0f;
         inputEnv           = 0.0f;
-        recentInputPeak    = 0.0f;
         samplesSinceCross  = 0;
         smoothedPeriod     = 0.0f;
         periodValid        = false;
+        cyclePeak          = 0.0f;
     }
 
     float process(float x) noexcept {
@@ -47,6 +47,8 @@ public:
         if (samplesSinceCross > static_cast<int>(sr * 0.05f)) {
             periodValid = false;
             armed       = true;
+            peakEnv     = 0.0f;  // stale from prior phrase; next note re-charges in < 0.5 ms
+            inputEnv    = 0.0f;
         }
 
         // 1. Rising zero-crossing detector with armed hysteresis.
@@ -65,26 +67,22 @@ public:
                 smoothedPeriod = periodValid ? 0.9f * smoothedPeriod + 0.1f * raw : raw;
                 periodValid    = true;
             }
+            // Snap peakEnv down to the actual ramp height of the completed cycle.
+            // If a higher-pitched note follows a lower-pitched one (or a rest), cyclePeak
+            // is smaller than the stale peakEnv, so we correct immediately rather than
+            // waiting for the slow 300 ms peakRel to decay.
+            if (cyclePeak > 0.0f)
+                peakEnv = std::min(peakEnv, cyclePeak);
+            else
+                peakEnv = 0.0f;   // rest / silence — same effect as the 50 ms timeout
+            cyclePeak = 0.0f;
+
             samplesSinceCross = 0;
             armed    = false;
             slewPrev = -1.0f;
-
-            // Pre-charge inputEnv to last cycle's peak so note onsets are
-            // instantaneous rather than fading in from 0.
-            inputEnv        = recentInputPeak;
-            recentInputPeak = 0.0f;
-
-            // Pre-charge peakEnv to the expected ramp amplitude for this pitch.
-            // Without this, a note played after a lower-frequency note inherits a
-            // peakEnv that's too high, producing LF amplitude drift until peakEnv
-            // finally decays to the correct level (which can take seconds).
-            if (periodValid)
-                peakEnv = std::min(slewRate * smoothedPeriod, 2.0f);
         } else {
             slewPrev = std::min(slewPrev + slewRate, 1.0f);
         }
-
-        recentInputPeak = std::max(recentInputPeak, std::abs(x));
 
         // 2. Amplitude normalization via peak follower.
         const float shifted = slewPrev + 1.0f;   // [0, 2] at low freq, smaller at high
@@ -92,6 +90,8 @@ public:
             peakEnv = peakAtk * peakEnv + (1.0f - peakAtk) * shifted;
         else
             peakEnv *= peakRel;
+
+        cyclePeak = std::max(cyclePeak, shifted);
 
         float norm = 0.0f;
         if (peakEnv > 0.005f)
@@ -124,15 +124,15 @@ private:
     float smoothedPeriod    = 0.0f;
     bool  periodValid       = false;
 
-    float peakEnv = 0.0f;
-    float peakAtk = 0.0f, peakRel = 0.0f;
+    float peakEnv  = 0.0f;
+    float cyclePeak = 0.0f;
+    float peakAtk  = 0.0f, peakRel = 0.0f;
 
     float dcX1 = 0.0f, dcY1 = 0.0f;
     static constexpr float dcCoeff = 0.9995f;
 
-    float inputEnv      = 0.0f;
-    float recentInputPeak = 0.0f;
-    float envAtk        = 0.0f, envRel = 0.0f;
+    float inputEnv = 0.0f;
+    float envAtk   = 0.0f, envRel = 0.0f;
 
     float coeff(float t) const noexcept {
         return std::exp(-1.0f / (t * sr));
